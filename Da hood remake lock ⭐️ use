@@ -1,0 +1,193 @@
+-- real_system v1 - Jump Button Notification
+-- By sahel0879
+
+-- Settings
+local TEXT_COLOR = Color3.fromRGB(255, 255, 255) -- White text
+local TARGET_COLOR = Color3.fromRGB(255, 255, 0) -- Yellow target name
+local NOTIFICATION_COLOR = Color3.fromRGB(40, 40, 40) -- Dark background
+
+-- UI Setup
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "RealSystemUI"
+ScreenGui.Parent = game:GetService("CoreGui")
+
+-- Find jump button (for mobile)
+local jumpButton
+if game:GetService("Players").LocalPlayer.PlayerGui:FindFirstChild("TouchGui") then
+    jumpButton = game:GetService("Players").LocalPlayer.PlayerGui.TouchGui.TouchControlFrame.JumpButton
+end
+
+-- Lock Button (180x60)
+local LockButton = Instance.new("TextButton")
+LockButton.Name = "real_system_v1"
+LockButton.Size = UDim2.new(0, 180, 0, 60)
+LockButton.Position = UDim2.new(0.5, -90, 0.5, -30)
+LockButton.BackgroundColor3 = Color3.fromRGB(0, 0, 0) -- Black when inactive
+LockButton.TextColor3 = TEXT_COLOR
+LockButton.Text = "real_system lock\nTap to toggle lock"
+LockButton.Font = Enum.Font.SourceSansBold
+LockButton.TextSize = 16
+LockButton.TextWrapped = true
+LockButton.Parent = ScreenGui
+
+-- Target Display
+local TargetLabel = Instance.new("TextLabel")
+TargetLabel.Name = "TargetLabel"
+TargetLabel.Size = UDim2.new(1, 0, 0.4, 0)
+TargetLabel.Position = UDim2.new(0, 0, 0.6, 0)
+TargetLabel.BackgroundTransparency = 1
+TargetLabel.TextColor3 = TARGET_COLOR
+TargetLabel.Text = ""
+TargetLabel.Font = Enum.Font.SourceSansBold
+TargetLabel.TextSize = 16
+TargetLabel.Parent = LockButton
+
+-- Jump Button Notification
+local JumpNotification = Instance.new("TextLabel")
+JumpNotification.Name = "JumpNotification"
+JumpNotification.Size = UDim2.new(0, 200, 0, 40)
+JumpNotification.Position = UDim2.new(0, (jumpButton and jumpButton.AbsolutePosition.X - 210) or 100, 0, (jumpButton and jumpButton.AbsolutePosition.Y) or 500)
+JumpNotification.BackgroundColor3 = NOTIFICATION_COLOR
+JumpNotification.TextColor3 = TEXT_COLOR
+JumpNotification.Text = "Locked on target"
+JumpNotification.Font = Enum.Font.SourceSansBold
+JumpNotification.TextSize = 16
+JumpNotification.Visible = false
+JumpNotification.Parent = ScreenGui
+
+-- Initial notification
+local StartNotification = Instance.new("TextLabel")
+StartNotification.Name = "StartNotification"
+StartNotification.Size = UDim2.new(0, 250, 0, 50)
+StartNotification.Position = UDim2.new(0.5, -125, 0.8, 0)
+StartNotification.BackgroundColor3 = NOTIFICATION_COLOR
+StartNotification.TextColor3 = TEXT_COLOR
+StartNotification.Text = "Real_system v1 lock"
+StartNotification.Font = Enum.Font.SourceSansBold
+StartNotification.TextSize = 18
+StartNotification.Parent = ScreenGui
+
+-- Hide start notification after 3 seconds
+task.delay(3, function()
+    StartNotification:Destroy()
+end)
+
+-- Movable Button System
+local dragging = false
+local dragStart, startPos
+
+LockButton.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        dragging = true
+        dragStart = input.Position
+        startPos = LockButton.Position
+        
+        input.Changed:Connect(function()
+            if input.UserInputState == Enum.UserInputState.End then
+                dragging = false
+            end
+        end)
+    end
+end)
+
+game:GetService("UserInputService").InputChanged:Connect(function(input)
+    if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+        local delta = input.Position - dragStart
+        LockButton.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+    end
+end)
+
+-- Lock System
+local locked = false
+local target = nil
+local lastActionTime = os.time()
+
+local function getClosestPlayer()
+    local closestPlayer, closestDist = nil, math.huge
+    local localPlayer = game:GetService("Players").LocalPlayer
+    local localChar = localPlayer.Character
+    if not localChar then return nil end
+    
+    local localHead = localChar:FindFirstChild("Head")
+    if not localHead then return nil end
+
+    for _, player in ipairs(game:GetService("Players"):GetPlayers()) do
+        if player ~= localPlayer and player.Character then
+            local char = player.Character
+            local hum = char:FindFirstChildOfClass("Humanoid")
+            local head = char:FindFirstChild("Head")
+            
+            if hum and hum.Health > 0 and head then
+                local dist = (localHead.Position - head.Position).Magnitude
+                if dist < closestDist then
+                    closestDist = dist
+                    closestPlayer = player
+                end
+            end
+        end
+    end
+    return closestPlayer
+end
+
+-- INSTANT LOCK function
+local function lockToTarget()
+    if target and target.Character then
+        local head = target.Character:FindFirstChild("Head")
+        if head then
+            workspace.CurrentCamera.CFrame = CFrame.new(workspace.CurrentCamera.CFrame.Position, head.Position)
+            -- Update jump notification with target name
+            JumpNotification.Text = "Locked: "..target.Name
+            JumpNotification.Visible = true
+        end
+    else
+        JumpNotification.Visible = false
+    end
+end
+
+-- Toggle Lock
+LockButton.MouseButton1Click:Connect(function()
+    locked = not locked
+    lastActionTime = os.time()
+    
+    if locked then
+        LockButton.BackgroundColor3 = Color3.fromRGB(255, 0, 0) -- Red when locked
+        target = getClosestPlayer()
+        if target then
+            TargetLabel.Text = target.Name.."-locked"
+            lockToTarget()
+        end
+    else
+        LockButton.BackgroundColor3 = Color3.fromRGB(0, 100, 255) -- Blue when unlocked
+        TargetLabel.Text = ""
+        JumpNotification.Visible = false
+        target = nil
+    end
+end)
+
+-- Reset to inactive state after 5 seconds of inactivity
+game:GetService("RunService").Heartbeat:Connect(function()
+    if not locked and (os.time() - lastActionTime > 5) then
+        LockButton.BackgroundColor3 = Color3.fromRGB(0, 0, 0) -- Black when inactive
+    end
+end)
+
+-- Continuous Lock (60 FPS)
+game:GetService("RunService").RenderStepped:Connect(function()
+    if locked then
+        lastActionTime = os.time()
+        if not target or not target.Character then
+            target = getClosestPlayer()
+            if target then
+                TargetLabel.Text = target.Name.."-locked"
+                lockToTarget()
+            else
+                locked = false
+                LockButton.BackgroundColor3 = Color3.fromRGB(0, 100, 255)
+                TargetLabel.Text = ""
+                JumpNotification.Visible = false
+            end
+        else
+            lockToTarget()
+        end
+    end
+end)
